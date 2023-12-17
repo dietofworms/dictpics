@@ -1,0 +1,114 @@
+/* Reset some default styles */
+* {
+    box-sizing: border-box;
+}
+
+body, html {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Times New Roman', Times, serif, sans-serif;
+}
+
+header {
+    background-color: #333;
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+main {
+    display: flex;
+    justify-content: center;
+    align-items: center; /* Align children vertically in the center */
+    padding: 20px;
+    height: calc(100% - 60px);
+}
+
+#imageContainer {
+    width: 36%; /* 60% of the current size, assuming the current size was 60% */
+    text-align: center;
+    margin-right: 20px; /* Maintain the space between the image and the text */
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center align the children (image and buttons) */
+}
+
+#uploadedImage {
+    width: 100%; /* The image will fill the container */
+    display: none; /* Initially hidden */
+    border-radius: 5px; /* Optional: if you want rounded corners */
+}
+
+#imageUpload {
+    display: none;
+}
+
+#uploadButton, #hideButton {
+    padding: 10px 15px;
+    margin-top: 10px;
+    border-radius: 5px;
+    border: none;
+    background-color: #555;
+    color: white;
+    cursor: pointer;
+    display: block; /* Align buttons above each other */
+}
+
+#uploadButton {
+    background-color: #add8e6; /* Light blue color for the upload button */
+}
+
+button:hover {
+    opacity: 0.8;
+}
+
+#definitionContainer {
+    width: 40%; /* Adjust the width of the definition container if necessary */
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Vertically center the contents */
+    padding: 20px;
+    text-align: left; /* Align text to the left */
+}
+
+#termTitle {
+    font-size: 24px;
+    margin-bottom: 10px;
+    font-style: italic; /* Add this line to make the title italic */
+}
+
+#definition {
+    text-align: left;
+}
+
+input[type="text"], button {
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+
+input[type="text"] {
+    flex-grow: 1;
+    margin-right: 10px;
+}
+
+button {
+    background-color: #555;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #777;
+}
+
+/* Additional styles for button alignment */
+#buttonContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+}
+
+/* Add more styles as needed */
