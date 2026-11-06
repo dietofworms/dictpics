@@ -29,7 +29,7 @@ function Plate({ photo, name }: { photo: string | null; name: string }) {
         alt={name ? `Photograph of ${name}` : 'Photograph for this entry'}
         draggable={false}
       />
-      <figcaption>{name || 'Plate'}</figcaption>
+      <figcaption>{name || 'Fig. 1'}</figcaption>
     </figure>
   )
 }
