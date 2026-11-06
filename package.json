@@ -1,15 +1,45 @@
 {
   "name": "dictpics",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Pair a photo with a live Urban Dictionary entry and save it as a dictionary page.",
+  "type": "module",
   "license": "ISC",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "proxy": "node --experimental-strip-types proxy/server.ts",
+    "test": "vitest run"
+  },
   "dependencies": {
-    "express": "^4.18.2"
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/source-serif-4": "^5.3.1",
+    "@radix-ui/react-label": "^2.1.17",
+    "@radix-ui/react-slot": "^1.5.0",
+    "@radix-ui/react-switch": "^1.4.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.61.0",
+    "modern-screenshot": "^4.7.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-easy-crop": "^6.2.4",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^30.1.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   }
 }

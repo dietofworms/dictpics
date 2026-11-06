@@ -6,7 +6,10 @@ node_modules/
 
 # Build output directory
 dist/
+dist-ssr/
 build/
+.vite/
+*.local
 
 # Logs
 logs/

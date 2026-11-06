@@ -1,0 +1,89 @@
+# Build the static site and deploy it to GitHub Pages.
+# Pages cannot run /api/urban. Live definitions need the separate proxy
+# and the repository variable VITE_URBAN_LOOKUP_URL. Do not put secrets in
+# any VITE_ variable: those values are copied into the public JavaScript.
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Setup Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        id: pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - name: Build
+        run: npm run build
+        env:
+          DICTPICS_BASE_PATH: ${{ steps.pages.outputs.base_path || '/dictpics' }}
+          VITE_URBAN_LOOKUP_URL: ${{ vars.VITE_URBAN_LOOKUP_URL }}
+
+      - name: Check Pages base
+        env:
+          DICTPICS_BASE_PATH: ${{ steps.pages.outputs.base_path || '/dictpics' }}
+        run: |
+          base="${DICTPICS_BASE_PATH%/}"
+          case "$base" in
+            /[A-Za-z0-9._-]*)
+              case "$base" in
+                *[!/A-Za-z0-9._-]*) echo "Refusing unusual Pages base" >&2; exit 1 ;;
+              esac
+              ;;
+            *) echo "Refusing unusual Pages base" >&2; exit 1 ;;
+          esac
+          grep -q "${base}/assets/" dist/index.html
+          grep -q "${base}/logo.webp" dist/index.html
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
