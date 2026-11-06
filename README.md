@@ -46,13 +46,13 @@ Until Pages is enabled, a push to `master` can still run the workflow, but GitHu
 
 Dev and preview keep working with the built-in proxy and no extra configuration.
 
-For the Pages site, run the included proxy somewhere you control, then point the build at it. The proxy only accepts a `term` and fetches `https://api.urbandictionary.com/v0/define`. It has no API key, it does not accept a target URL, and it only adds CORS for origins you list.
+For the Pages site, run the included proxy somewhere you control, then point the build at it. The proxy only accepts a `term` and fetches `https://api.urbandictionary.com/v0/define`. It has no API key and it does not accept a target URL. It answers lookups only for origins you list and returns 403 for any other origin, or none, without calling Urban Dictionary. Each client address gets 30 lookups a minute, and answers are cached for 10 minutes.
 
 ```bash
-PORT=8787 ALLOWED_ORIGINS=https://dietofworms.github.io npm run proxy
+HOST=0.0.0.0 PORT=8787 ALLOWED_ORIGINS=https://dietofworms.github.io npm run proxy
 ```
 
-`npm run proxy` listens on port 8787. Then add a repository **variable** (Settings → Secrets and variables → Actions → Variables), not a secret:
+`npm run proxy` listens on 127.0.0.1:8787 unless `HOST` and `PORT` say otherwise. Behind a reverse proxy, every request shares the reverse proxy's address, so the 30-a-minute limit applies to all visitors together. Then add a repository **variable** (Settings → Secrets and variables → Actions → Variables), not a secret:
 
 `VITE_URBAN_LOOKUP_URL` = `https://<your-proxy-host>/api/urban`
 
