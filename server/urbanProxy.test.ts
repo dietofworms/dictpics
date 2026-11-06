@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createCorsProxyServer,
+  clientKey,
   createRateLimiter,
   createResponseCache,
   createUrbanMiddleware,
@@ -258,5 +259,45 @@ describe('urban proxy', () => {
     expect(cache.get('z')).toBe(3)
     time += 500
     expect(cache.get('z')).toBeUndefined()
+  })
+
+  it('keys IPv6 clients by /64 and IPv4 by address', () => {
+    expect(clientKey('203.0.113.9')).toBe('203.0.113.9')
+    expect(clientKey('::ffff:203.0.113.9')).toBe('203.0.113.9')
+    expect(clientKey('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64')
+    expect(clientKey('2001:0db8:0001:0002:ffff:ffff:ffff:ffff')).toBe('2001:db8:1:2::/64')
+    expect(clientKey('2001:db8::5')).toBe('2001:db8:0:0::/64')
+    expect(clientKey('::1')).toBe('0:0:0:0::/64')
+    expect(clientKey(undefined)).toBe('unknown')
+  })
+
+  it('refuses new clients once the limiter is full', () => {
+    let time = 0
+    const allow = createRateLimiter(5, 1000, () => time, 2)
+    expect(allow('a')).toBe(true)
+    expect(allow('b')).toBe(true)
+    expect(allow('c')).toBe(false)
+    expect(allow('a')).toBe(true)
+    time = 1000
+    expect(allow('c')).toBe(true)
+  })
+
+  it('caps upstream calls across clients but still serves the cache', async () => {
+    const fetchImpl = vi.fn(async () => Response.json(upstreamList)) as typeof fetch
+    const server = createCorsProxyServer({
+      allowedOrigins: ['https://dietofworms.github.io'],
+      fetchImpl,
+      upstreamPerMinute: 1,
+    })
+    const base = await listen(server)
+    const headers = { Origin: 'https://dietofworms.github.io' }
+    try {
+      expect((await fetch(`${base}/api/urban?term=one`, { headers })).status).toBe(200)
+      expect((await fetch(`${base}/api/urban?term=two`, { headers })).status).toBe(503)
+      expect((await fetch(`${base}/api/urban?term=one`, { headers })).status).toBe(200)
+      expect(fetchImpl).toHaveBeenCalledOnce()
+    } finally {
+      await close(server)
+    }
   })
 })
