@@ -1,0 +1,79 @@
+# Build the static site and deploy it to GitHub Pages.
+# Pages cannot run /api/urban. Live definitions need the separate proxy
+# and the repository variable VITE_URBAN_LOOKUP_URL. Do not put secrets in
+# any VITE_ variable: those values are copied into the public JavaScript.
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Setup Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build
+        run: npm run build
+        env:
+          DICTPICS_BASE_PATH: ${{ steps.pages.outputs.base_path || '/dictpics' }}
+          VITE_URBAN_LOOKUP_URL: ${{ vars.VITE_URBAN_LOOKUP_URL }}
+
+      - name: Check Pages base
+        run: |
+          base="${DICTPICS_BASE_PATH%/}"
+          grep -q "${base}/assets/" dist/index.html
+          grep -q "${base}/logo.webp" dist/index.html
+        env:
+          DICTPICS_BASE_PATH: ${{ steps.pages.outputs.base_path || '/dictpics' }}
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

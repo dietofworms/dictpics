@@ -7,7 +7,17 @@ import { createUrbanMiddleware } from './server/urbanProxy.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 
-export default defineConfig({
+/** Project Pages URL is https://dietofworms.github.io/dictpics/ */
+export const PAGES_BASE_PATH = '/dictpics/'
+
+function productionBase(): string {
+  const configured = process.env.DICTPICS_BASE_PATH?.trim()
+  const value = configured && configured.length > 0 ? configured : PAGES_BASE_PATH
+  return value.endsWith('/') ? value : `${value}/`
+}
+
+export default defineConfig(({ mode }) => ({
+  base: mode === 'production' ? productionBase() : '/',
   plugins: [
     react(),
     tailwindcss(),
@@ -30,4 +40,4 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
   },
-})
+}))

@@ -7,12 +7,14 @@ import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
 import { Switch } from '@/components/ui/switch.tsx'
 import { Textarea } from '@/components/ui/textarea.tsx'
+import { publicAsset } from '@/lib/assets.ts'
 import { deriveModel, type EntryMode, type LookupStatus } from '@/lib/model.ts'
 import { pageToPng } from '@/lib/png.ts'
 import { entryFilename, shareBlob, triggerDownload } from '@/lib/share.ts'
 import { isLikelySlur } from '@/lib/slurs.ts'
 import { OWN_WORDING, pickRandomTerm, SKIP_SLURS_DEFAULT, termsForPicker } from '@/lib/terms.ts'
-import { lookupTerm, type UrbanEntry } from '@/lib/urban.ts'
+import { lookupTerm } from '@/lib/lookup.ts'
+import { LookupUnavailableError, STATIC_HOST_LOOKUP_MESSAGE, type UrbanEntry } from '@/lib/urban.ts'
 
 const fieldClass =
   'flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -62,6 +64,10 @@ export default function App() {
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
         if (error instanceof DOMException && error.name === 'AbortError') return
+        if (error instanceof LookupUnavailableError) {
+          setStatus('unavailable')
+          return
+        }
         setStatus('error')
       })
 
@@ -153,7 +159,7 @@ export default function App() {
     <div className="min-h-svh bg-[#e6dccb] text-[#241c14]">
       <header className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4">
         <img
-          src="/logo.webp"
+          src={publicAsset('logo.webp')}
           alt="dictpics"
           className="h-12 w-12 rounded-md border border-[#d7c7ae] bg-white object-cover"
         />
@@ -241,12 +247,14 @@ export default function App() {
               Looking up “{term}”…
             </p>
           ) : null}
-          {model.kind === 'missing' || model.kind === 'error' ? (
+          {model.kind === 'missing' || model.kind === 'error' || model.kind === 'unavailable' ? (
             <div className="grid gap-2">
               <p className="text-sm">
                 {model.kind === 'missing'
                   ? 'Urban Dictionary has no entry for this word.'
-                  : "The lookup didn't go through."}
+                  : model.kind === 'unavailable'
+                    ? STATIC_HOST_LOOKUP_MESSAGE
+                    : "The lookup didn't go through."}
               </p>
               <div className="flex flex-wrap gap-2">
                 {model.kind === 'error' ? (

@@ -1,5 +1,16 @@
 export const URBAN_API = 'https://api.urbandictionary.com/v0/define'
 
+/** Shown when a static host cannot reach Urban Dictionary. Never a stand-in definition. */
+export const STATIC_HOST_LOOKUP_MESSAGE =
+  'Live lookup is not available on this static host. GitHub Pages cannot run the proxy, and Urban Dictionary does not allow browser calls. No definition was invented.'
+
+export class LookupUnavailableError extends Error {
+  constructor() {
+    super('lookup unavailable')
+    this.name = 'LookupUnavailableError'
+  }
+}
+
 export type UrbanListItem = {
   word: string
   definition: string
@@ -99,16 +110,29 @@ export function definitionParts(text: string): TextPart[] {
   return parts
 }
 
-export async function lookupTerm(
-  term: string,
-  signal?: AbortSignal,
-  fetchImpl: typeof fetch = fetch,
-): Promise<UrbanEntry | null> {
-  const response = await fetchImpl(`/api/urban?term=${encodeURIComponent(term)}`, {
-    signal,
-    cache: 'no-store',
-    headers: { Accept: 'application/json' },
-  })
-  if (!response.ok) throw new Error('lookup failed')
-  return pickBestEntry(await response.json())
+export function urbanLookupEndpoint(env: { baseUrl: string; configured?: string }): string {
+  const configured = env.configured?.trim()
+  if (configured) {
+    let url: URL
+    try {
+      url = new URL(configured)
+    } catch {
+      throw new LookupUnavailableError()
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new LookupUnavailableError()
+    if (url.username || url.password) throw new LookupUnavailableError()
+    if (url.hostname.toLowerCase() === 'api.urbandictionary.com') throw new LookupUnavailableError()
+    return url.toString()
+  }
+  const base = env.baseUrl.endsWith('/') ? env.baseUrl : `${env.baseUrl}/`
+  return `${base}api/urban`
 }
+
+export function urbanLookupRequestUrl(term: string, endpoint: string): string {
+  const absolute = /^https?:\/\//i.test(endpoint)
+  const url = absolute ? new URL(endpoint) : new URL(endpoint, 'http://dictpics.local')
+  url.searchParams.set('term', term)
+  if (!absolute) return `${url.pathname}${url.search}`
+  return url.toString()
+}
+

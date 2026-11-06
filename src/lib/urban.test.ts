@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest'
-import { definitionParts, pickBestEntry, urbanPermalink } from './urban.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { publicAsset } from './assets.ts'
+import {
+  definitionParts,
+  LookupUnavailableError,
+  pickBestEntry,
+  urbanLookupEndpoint,
+  urbanLookupRequestUrl,
+  urbanPermalink,
+} from './urban.ts'
+import { lookupTerm } from './lookup.ts'
 
 const permalink = 'https://www.urbandictionary.com/define.php?term=gremlin&defid=2'
 
@@ -82,6 +91,42 @@ describe('urban payloads', () => {
     expect(urbanPermalink('https://evil.example/define')).toBeNull()
     expect(urbanPermalink('javascript:alert(1)')).toBeNull()
     expect(urbanPermalink('not a url')).toBeNull()
+  })
+
+  it('keeps Pages lookups on your proxy instead of calling Urban Dictionary from the browser', () => {
+    expect(urbanLookupEndpoint({ baseUrl: '/' })).toBe('/api/urban')
+    expect(urbanLookupEndpoint({ baseUrl: '/dictpics/' })).toBe('/dictpics/api/urban')
+    expect(urbanLookupRequestUrl('chaos gremlin', '/dictpics/api/urban')).toBe(
+      '/dictpics/api/urban?term=chaos+gremlin',
+    )
+    expect(
+      urbanLookupRequestUrl('gremlin', urbanLookupEndpoint({
+        baseUrl: '/dictpics/',
+        configured: 'https://proxy.example/api/urban',
+      })),
+    ).toBe('https://proxy.example/api/urban?term=gremlin')
+    expect(publicAsset('logo.webp', '/dictpics/')).toBe('/dictpics/logo.webp')
+    expect(() =>
+      urbanLookupEndpoint({ baseUrl: '/', configured: 'https://api.urbandictionary.com/v0/define' }),
+    ).toThrow(LookupUnavailableError)
+    expect(() => urbanLookupEndpoint({ baseUrl: '/', configured: 'javascript:alert(1)' })).toThrow(
+      LookupUnavailableError,
+    )
+    expect(() =>
+      urbanLookupEndpoint({ baseUrl: '/', configured: 'https://user:secret@proxy.example/api/urban' }),
+    ).toThrow(LookupUnavailableError)
+  })
+
+  it('treats a static-host miss as unavailable instead of inventing a definition', async () => {
+    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0]) => new Response('<html>missing</html>', {
+      status: 404,
+      headers: { 'content-type': 'text/html' },
+    }))
+    await expect(lookupTerm('gremlin', undefined, fetchImpl as typeof fetch)).rejects.toBeInstanceOf(
+      LookupUnavailableError,
+    )
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toMatch(/\/api\/urban\?term=gremlin$/)
+    expect(String(fetchImpl.mock.calls[0]?.[0])).not.toContain('urbandictionary.com')
   })
 
   it('turns bracketed words into linked text without dropping them', () => {

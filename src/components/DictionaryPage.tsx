@@ -1,7 +1,8 @@
 import type { ReactNode, RefObject } from 'react'
+import { publicAsset } from '@/lib/assets.ts'
 import { guideWords, pageNumberFor } from '@/lib/dictionary.ts'
 import type { PageModel } from '@/lib/model.ts'
-import { definitionParts, type UrbanEntry } from '@/lib/urban.ts'
+import { definitionParts, STATIC_HOST_LOOKUP_MESSAGE, type UrbanEntry } from '@/lib/urban.ts'
 
 function RichText({ text }: { text: string }) {
   const lines = text.replaceAll('\r\n', '\n').split('\n')
@@ -79,7 +80,7 @@ function PageFrame({
       <footer className="dict-foot">
         {credit ?? <p className="dict-credit">dictpics</p>}
         <div className="dict-brand">
-          <img src="/logo.webp" alt="" width={32} height={32} />
+          <img src={publicAsset('logo.webp')} alt="" width={32} height={32} />
           <span>dictpics</span>
         </div>
       </footer>
@@ -107,7 +108,7 @@ export function DictionaryPage({
         <footer className="dict-foot">
           <p className="dict-credit">dictpics</p>
           <div className="dict-brand">
-            <img src="/logo.webp" alt="" width={32} height={32} />
+            <img src={publicAsset('logo.webp')} alt="" width={32} height={32} />
             <span>dictpics</span>
           </div>
         </footer>
@@ -143,6 +144,9 @@ export function DictionaryPage({
         ) : null}
         {model.kind === 'error' ? (
           <p className="dict-muted">The lookup didn't go through.</p>
+        ) : null}
+        {model.kind === 'unavailable' ? (
+          <p className="dict-muted">{STATIC_HOST_LOOKUP_MESSAGE}</p>
         ) : null}
         {model.kind === 'custom' && model.definition ? (
           <p className="dict-def">

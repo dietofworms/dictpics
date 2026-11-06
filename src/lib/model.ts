@@ -1,7 +1,7 @@
 import { isLikelySlur } from './slurs.ts'
 import type { UrbanEntry } from './urban.ts'
 
-export type LookupStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error'
+export type LookupStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error' | 'unavailable'
 export type EntryMode = 'curated' | 'custom'
 
 type Plate = { term: string; name: string; photo: string | null }
@@ -11,6 +11,7 @@ export type PageModel =
   | ({ kind: 'loading' } & Plate)
   | ({ kind: 'missing' } & Plate)
   | ({ kind: 'error' } & Plate)
+  | ({ kind: 'unavailable' } & Plate)
   | { kind: 'skipped' }
   | ({ kind: 'custom'; definition: string } & Plate)
   | ({ kind: 'urban'; entry: UrbanEntry } & Plate)
@@ -45,6 +46,7 @@ export function deriveModel(input: {
     return { kind: 'urban', term, name, photo, entry: input.entry }
   }
   if (input.status === 'error') return { kind: 'error', term, name, photo }
+  if (input.status === 'unavailable') return { kind: 'unavailable', term, name, photo }
   if (input.status === 'missing') return { kind: 'missing', term, name, photo }
   return { kind: 'loading', term, name, photo }
 }

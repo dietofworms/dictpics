@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.tsx'
 import { pageNumberFor } from './lib/dictionary.ts'
 import { OWN_WORDING, SLANG_TERMS } from './lib/terms.ts'
+import { STATIC_HOST_LOOKUP_MESSAGE } from './lib/urban.ts'
 
 const high = {
   word: 'gremlin',
@@ -75,6 +76,22 @@ describe('dictpics', () => {
     expect(screen.getByText(String(pageNumberFor('gremlin', 'Steve')))).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /download png/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: /web share/i })).toBeEnabled()
+  })
+
+  it('does not invent a definition when the static host has no proxy', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html>missing</html>', {
+        status: 404,
+        headers: { 'content-type': 'text/html' },
+      })),
+    )
+    render(<App />)
+    await user.selectOptions(screen.getByLabelText(/^term$/i), 'gremlin')
+    expect((await screen.findAllByText(STATIC_HOST_LOOKUP_MESSAGE)).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Definition: Urban Dictionary/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /use my own wording/i })).toBeInTheDocument()
   })
 
   it('offers your own wording when Urban Dictionary has no entry', async () => {

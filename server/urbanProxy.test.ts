@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
-import { createUrbanMiddleware, handleUrbanRequest } from './urbanProxy.ts'
+import { createCorsProxyServer, createUrbanMiddleware, handleUrbanRequest } from './urbanProxy.ts'
 
 const upstreamList = {
   list: [
@@ -65,6 +65,69 @@ describe('urban proxy', () => {
       throw new Error('offline')
     })
     expect(await handleUrbanRequest('/api/urban?term=gremlin', 'GET', throwing)).toMatchObject({ status: 502 })
+  })
+
+  it('accepts the Pages base path and still calls only Urban Dictionary', async () => {
+    const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = new URL(String(input))
+      expect(`${url.origin}${url.pathname}`).toBe('https://api.urbandictionary.com/v0/define')
+      expect(url.searchParams.get('term')).toBe('gremlin')
+      expect(url.searchParams.get('url')).toBeNull()
+      return Response.json(upstreamList)
+    })
+    const result = await handleUrbanRequest(
+      '/dictpics/api/urban?term=gremlin&url=https://evil.example',
+      'GET',
+      fetchImpl,
+    )
+    expect(result).toMatchObject({ status: 200 })
+  })
+
+  it('allows the Pages origin and does not open the proxy to other sites', async () => {
+    const fetchImpl = vi.fn(async () => Response.json(upstreamList)) as typeof fetch
+    const server = createCorsProxyServer({
+      allowedOrigins: ['https://dietofworms.github.io'],
+      fetchImpl,
+    })
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('no port')
+    const base = `http://127.0.0.1:${address.port}`
+    try {
+      const ok = await fetch(`${base}/api/urban?term=gremlin`, {
+        headers: { Origin: 'https://dietofworms.github.io', Accept: 'application/json' },
+      })
+      expect(ok.status).toBe(200)
+      expect(ok.headers.get('access-control-allow-origin')).toBe('https://dietofworms.github.io')
+      expect(ok.headers.get('access-control-allow-credentials')).toBeNull()
+      const body = (await ok.json()) as { list: Array<{ definition: string }> }
+      expect(body.list[0]?.definition).toBe('FIXTURE_FROM_UPSTREAM')
+
+      const blocked = await fetch(`${base}/api/urban?term=gremlin`, {
+        headers: { Origin: 'https://evil.example' },
+      })
+      expect(blocked.headers.get('access-control-allow-origin')).toBeNull()
+
+      const preflight = await fetch(`${base}/api/urban?term=gremlin`, {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://dietofworms.github.io' },
+      })
+      expect(preflight.status).toBe(204)
+      expect(preflight.headers.get('access-control-allow-origin')).toBe('https://dietofworms.github.io')
+
+      const evilPreflight = await fetch(`${base}/api/urban`, {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://evil.example' },
+      })
+      expect(evilPreflight.status).toBe(403)
+      expect(evilPreflight.headers.get('access-control-allow-origin')).toBeNull()
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()))
+      })
+    }
   })
 
   it('ignores every other path', async () => {

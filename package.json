@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "proxy": "node --experimental-strip-types proxy/server.ts",
     "test": "vitest run"
   },
   "dependencies": {
