@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      pages_enabled: ${{ steps.pages.outcome == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -43,7 +45,15 @@ jobs:
       - name: Setup Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: pages
+        # Fails until Pages is enabled (Settings > Pages > Source: GitHub Actions).
+        # The build and tests still gate master; only the deploy is skipped.
+        continue-on-error: true
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - name: Note Pages is not enabled
+        if: steps.pages.outcome == 'failure'
+        run: |
+          echo "::notice::GitHub Pages is not enabled for this repository, so the deploy is skipped. Enable it under Settings > Pages > Source: GitHub Actions."
 
       - name: Build
         run: npm run build
@@ -68,13 +78,13 @@ jobs:
           grep -q "${base}/logo.webp" dist/index.html
 
       - name: Upload Pages artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: steps.pages.outcome == 'success'
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: dist
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.build.outputs.pages_enabled == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:
