@@ -12,26 +12,23 @@ const entry: UrbanEntry = {
 }
 
 const base = {
-  mode: 'curated' as const,
+  mode: 'lookup' as const,
   term: '',
   customTerm: '',
   customDefinition: '',
   name: '',
   photo: null,
-  skipSlurs: false,
   status: 'idle' as const,
   entry: null,
 }
 
 describe('deriveModel', () => {
-  it('shows a live entry only when the filter is off or the word is not flagged', () => {
-    expect(deriveModel({ ...base, term: 'retard', status: 'ready', entry })).toMatchObject({
+  it('shows a live entry once it has loaded', () => {
+    expect(deriveModel({ ...base, term: 'gremlin', status: 'ready', entry })).toMatchObject({
       kind: 'urban',
-      term: 'retard',
+      term: 'gremlin',
     })
-    expect(deriveModel({ ...base, term: 'retard', skipSlurs: true, status: 'ready', entry }).kind).toBe(
-      'skipped',
-    )
+    expect(deriveModel({ ...base, term: 'gremlin', status: 'loading' }).kind).toBe('loading')
   })
 
   it('uses your wording without pretending it came from Urban Dictionary', () => {
@@ -49,15 +46,4 @@ describe('deriveModel', () => {
     })
   })
 
-  it('skips your wording when the filter is on', () => {
-    expect(
-      deriveModel({
-        ...base,
-        mode: 'custom',
-        customTerm: 'retard',
-        customDefinition: 'nope',
-        skipSlurs: true,
-      }).kind,
-    ).toBe('skipped')
-  })
 })
