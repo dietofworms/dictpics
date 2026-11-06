@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http'
+import { isIPv6 } from 'node:net'
 import type { Connect } from 'vite'
 import { sanitizeUrbanPayload, URBAN_API } from '../src/lib/urban.ts'
 
@@ -56,13 +57,38 @@ async function readJsonCapped(response: Response, limit = MAX_UPSTREAM_BYTES): P
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 
-/** Fixed-window request counter keyed by client address. */
-export function createRateLimiter(limit: number, windowMs: number, now: () => number = Date.now) {
+/**
+ * Rate-limit key for a client address. One IPv6 subscriber usually holds a
+ * whole /64, so IPv6 clients share a key per /64 rather than per address.
+ */
+export function clientKey(address: string | undefined): string {
+  if (!address) return 'unknown'
+  const mapped = address.toLowerCase().replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '')
+  if (!isIPv6(mapped)) return mapped
+  const bare = mapped.split('%')[0] ?? mapped
+  const [head = '', tail = ''] = bare.split('::')
+  const left = head ? head.split(':') : []
+  const right = bare.includes('::') && tail ? tail.split(':') : []
+  const groups = bare.includes('::')
+    ? [...left, ...Array<string>(8 - left.length - right.length).fill('0'), ...right]
+    : left
+  return `${groups.slice(0, 4).map((g) => Number.parseInt(g || '0', 16).toString(16)).join(':')}::/64`
+}
+
+/** Fixed-window request counter keyed by client. Tracks at most `maxKeys` clients. */
+export function createRateLimiter(
+  limit: number,
+  windowMs: number,
+  now: () => number = Date.now,
+  maxKeys = 10000,
+) {
   const hits = new Map<string, { count: number; resetAt: number }>()
   return (key: string): boolean => {
     const time = now()
-    if (hits.size > 10000) {
+    if (hits.size >= maxKeys && !hits.has(key)) {
       for (const [k, v] of hits) if (v.resetAt <= time) hits.delete(k)
+      // Still full: refuse new clients until a window ends rather than grow without bound.
+      if (hits.size >= maxKeys) return false
     }
     const current = hits.get(key)
     if (!current || current.resetAt <= time) {
@@ -110,6 +136,7 @@ export async function handleUrbanRequest(
   method: string,
   fetchImpl: typeof fetch = fetch,
   cache?: ReturnType<typeof createResponseCache>,
+  upstreamAllowed: () => boolean = () => true,
 ): Promise<UrbanProxyResult> {
   let parsed: URL
   try {
@@ -136,6 +163,7 @@ export async function handleUrbanRequest(
   const cacheKey = term.toLowerCase()
   const cached = cache?.get(cacheKey)
   if (cached !== undefined) return { status: 200, body: cached }
+  if (!upstreamAllowed()) return { status: 503, body: { error: 'busy, try again shortly' } }
 
   try {
     const upstream = new URL(URBAN_API)
@@ -173,12 +201,16 @@ function requestOrigin(req: IncomingMessage): string | undefined {
 export function createCorsProxyServer(options?: {
   allowedOrigins?: readonly string[]
   fetchImpl?: typeof fetch
-  /** Lookups allowed per client address per minute. */
+  /** Lookups allowed per client (IPv4 address or IPv6 /64) per minute. */
   ratePerMinute?: number
+  /** Calls to Urban Dictionary per minute across all clients. Cache hits do not count. */
+  upstreamPerMinute?: number
 }): Server {
   const allowed = options?.allowedOrigins ?? DEFAULT_PROXY_ORIGINS
   const fetchImpl = options?.fetchImpl ?? fetch
   const allow = createRateLimiter(options?.ratePerMinute ?? 30, 60_000)
+  const upstream = createRateLimiter(options?.upstreamPerMinute ?? 300, 60_000)
+  const upstreamAllowed = () => upstream('upstream')
   const cache = createResponseCache(500, 10 * 60_000)
   return createServer((req, res) => {
     const origin = allowedOrigin(requestOrigin(req), allowed)
@@ -208,14 +240,14 @@ export function createCorsProxyServer(options?: {
         send(res, 403, { error: 'origin not allowed' })
         return
       }
-      if (!allow(req.socket.remoteAddress ?? 'unknown')) {
+      if (!allow(clientKey(req.socket.remoteAddress))) {
         res.setHeader('Retry-After', '60')
         send(res, 429, { error: 'too many requests' })
         return
       }
     }
 
-    void handleUrbanRequest(req.url ?? '/', req.method ?? 'GET', fetchImpl, cache).then(
+    void handleUrbanRequest(req.url ?? '/', req.method ?? 'GET', fetchImpl, cache, upstreamAllowed).then(
       (result) => {
         if (result === 'next') {
           res.statusCode = 404

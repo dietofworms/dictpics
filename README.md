@@ -46,7 +46,7 @@ Until Pages is enabled, a push to `master` can still run the workflow, but GitHu
 
 Dev and preview keep working with the built-in proxy and no extra configuration.
 
-For the Pages site, run the included proxy somewhere you control, then point the build at it. The proxy only accepts a `term` and fetches `https://api.urbandictionary.com/v0/define`. It has no API key and it does not accept a target URL. It answers lookups only for origins you list and returns 403 for any other origin, or none, without calling Urban Dictionary. Each client address gets 30 lookups a minute, and answers are cached for 10 minutes.
+For the Pages site, run the included proxy somewhere you control, then point the build at it. The proxy only accepts a `term` and fetches `https://api.urbandictionary.com/v0/define`. It has no API key and it does not accept a target URL. It answers lookups only for origins you list and returns 403 for any other origin, or none, without calling Urban Dictionary. Each client gets 30 lookups a minute (an IPv4 address, or an IPv6 /64). The proxy makes at most 300 calls to Urban Dictionary a minute in total, and answers are cached for 10 minutes. A non-browser client can fake the `Origin` header, so those limits are what bound abuse.
 
 ```bash
 HOST=0.0.0.0 PORT=8787 ALLOWED_ORIGINS=https://dietofworms.github.io npm run proxy
