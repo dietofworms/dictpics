@@ -1,29 +1,24 @@
-import { Dices, Download, Share2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Dices, Download, PenLine, Search, Share2 } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { DictionaryPage } from '@/components/DictionaryPage.tsx'
 import { FitToWidth } from '@/components/FitToWidth.tsx'
 import { PhotoField } from '@/components/PhotoField.tsx'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
-import { Switch } from '@/components/ui/switch.tsx'
 import { Textarea } from '@/components/ui/textarea.tsx'
 import { publicAsset } from '@/lib/assets.ts'
 import { deriveModel, type EntryMode, type LookupStatus } from '@/lib/model.ts'
 import { pageToPng } from '@/lib/png.ts'
 import { entryFilename, shareBlob, triggerDownload } from '@/lib/share.ts'
-import { isLikelySlur } from '@/lib/slurs.ts'
-import { OWN_WORDING, pickRandomTerm, SKIP_SLURS_DEFAULT, termsForPicker } from '@/lib/terms.ts'
+import { MAX_TERM_LENGTH, pickRandomTerm, SLANG_TERMS } from '@/lib/terms.ts'
 import { lookupTerm } from '@/lib/lookup.ts'
 import type { UrbanEntry } from '@/lib/urban.ts'
 
-const fieldClass =
-  'flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
-
 export default function App() {
   const pageRef = useRef<HTMLElement>(null)
-  const [skipSlurs, setSkipSlurs] = useState(SKIP_SLURS_DEFAULT)
-  const [mode, setMode] = useState<EntryMode>('curated')
+  const [mode, setMode] = useState<EntryMode>('lookup')
+  const [query, setQuery] = useState('')
   const [term, setTerm] = useState('')
   const [customTerm, setCustomTerm] = useState('')
   const [customDefinition, setCustomDefinition] = useState('')
@@ -35,15 +30,8 @@ export default function App() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
-  const choices = useMemo(() => termsForPicker(skipSlurs), [skipSlurs])
-
   useEffect(() => {
-    if (mode !== 'curated' || !term) {
-      setEntry(null)
-      setStatus('idle')
-      return
-    }
-    if (skipSlurs && isLikelySlur(term)) {
+    if (mode !== 'lookup' || !term) {
       setEntry(null)
       setStatus('idle')
       return
@@ -78,40 +66,39 @@ export default function App() {
     customDefinition,
     name,
     photo,
-    skipSlurs,
     status,
     entry,
   })
 
   const canExport = model.kind === 'urban' || (model.kind === 'custom' && model.definition.length > 0)
 
-  function onTermChange(value: string) {
-    if (value === OWN_WORDING) {
-      setMode('custom')
-      setCustomTerm((current) => current || term)
-      return
-    }
-    setMode('curated')
-    setTerm(value)
+  function lookUp(value: string) {
+    const next = value.trim().slice(0, MAX_TERM_LENGTH)
+    if (!next) return
+    setQuery(next)
+    setMode('lookup')
+    setTerm(next)
+  }
+
+  function onSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    lookUp(query)
+  }
+
+  function onQueryChange(value: string, inputType: string | undefined) {
+    setQuery(value)
+    // Picking a suggestion from the list looks it up straight away. Typing
+    // ("insertText") waits for Enter, so "clown" does not fire on the way
+    // to "clown car".
+    if (inputType !== 'insertText' && SLANG_TERMS.includes(value)) lookUp(value)
   }
 
   function onRandom() {
-    const next = pickRandomTerm(skipSlurs, Math.random, mode === 'curated' ? term : undefined)
-    setMode('curated')
-    setTerm(next.word)
-  }
-
-  function onSkipChange(checked: boolean) {
-    setSkipSlurs(checked)
-    if (checked && mode === 'curated' && term && isLikelySlur(term)) {
-      setTerm('')
-      setEntry(null)
-      setStatus('idle')
-    }
+    lookUp(pickRandomTerm(Math.random, mode === 'lookup' ? term : undefined))
   }
 
   function useOwnWording() {
-    setCustomTerm((current) => current || term)
+    setCustomTerm((current) => current || term || query.trim())
     setMode('custom')
   }
 
@@ -178,28 +165,45 @@ export default function App() {
               onChange={(event) => setName(event.target.value)}
             />
           </div>
-          <div className="grid gap-2">
+          <form className="grid gap-2" role="search" onSubmit={onSearch}>
             <Label htmlFor="term">Term</Label>
             <div className="flex gap-2">
-              <select
+              <Input
                 id="term"
-                className={fieldClass}
-                value={mode === 'custom' ? OWN_WORDING : term}
-                onChange={(event) => onTermChange(event.target.value)}
-              >
-                <option value="">Choose a term</option>
-                {choices.map((choice) => (
-                  <option key={choice.word} value={choice.word}>
-                    {choice.word}
-                  </option>
-                ))}
-                <option value={OWN_WORDING}>Use my own wording</option>
-              </select>
+                type="search"
+                list="term-suggestions"
+                value={query}
+                maxLength={MAX_TERM_LENGTH}
+                autoComplete="off"
+                enterKeyHint="search"
+                placeholder="Any word or phrase"
+                onChange={(event) =>
+                  onQueryChange(event.target.value, (event.nativeEvent as InputEvent).inputType)
+                }
+              />
+              <Button type="submit" disabled={!query.trim()}>
+                <Search /> Look up
+              </Button>
+            </div>
+            <datalist id="term-suggestions">
+              {SLANG_TERMS.map((word) => (
+                <option key={word} value={word} />
+              ))}
+            </datalist>
+            <div className="flex flex-wrap gap-2">
               <Button type="button" variant="secondary" onClick={onRandom}>
                 <Dices /> Random
               </Button>
+              <Button
+                type="button"
+                variant={mode === 'custom' ? 'default' : 'outline'}
+                aria-pressed={mode === 'custom'}
+                onClick={useOwnWording}
+              >
+                <PenLine /> Use my own wording
+              </Button>
             </div>
-          </div>
+          </form>
           {mode === 'custom' ? (
             <div className="grid gap-3">
               <div className="grid gap-2">
@@ -207,7 +211,7 @@ export default function App() {
                 <Input
                   id="custom-term"
                   value={customTerm}
-                  maxLength={80}
+                  maxLength={MAX_TERM_LENGTH}
                   onChange={(event) => setCustomTerm(event.target.value)}
                 />
               </div>
@@ -223,23 +227,7 @@ export default function App() {
               </div>
             </div>
           ) : null}
-          <div className="flex items-start justify-between gap-3 rounded-md border border-[#e2d3be] px-3 py-2">
-            <div className="grid gap-1">
-              <Label htmlFor="skip-slurs">Skip likely slurs</Label>
-              <p id="skip-slurs-hint" className="text-sm text-muted-foreground">
-                {skipSlurs
-                  ? 'On. Likely slurs are left out of the list and your own wording.'
-                  : 'Off. The list includes every curated term.'}
-              </p>
-            </div>
-            <Switch
-              id="skip-slurs"
-              checked={skipSlurs}
-              onCheckedChange={onSkipChange}
-              aria-describedby="skip-slurs-hint"
-            />
-          </div>
-          {status === 'loading' && mode === 'curated' ? (
+          {status === 'loading' && mode === 'lookup' ? (
             <p role="status" className="text-sm text-muted-foreground">
               Looking up “{term}”…
             </p>

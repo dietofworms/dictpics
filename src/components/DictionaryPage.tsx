@@ -116,20 +116,6 @@ export function DictionaryPage({
     )
   }
 
-  if (model.kind === 'skipped') {
-    return (
-      <article ref={pageRef} className="dict-page" aria-label="Dictionary page">
-        <div className="dict-running">
-          <span>dictpics</span>
-          <span className="page-no">—</span>
-          <span className="dict-running-right">dictpics</span>
-        </div>
-        <hr className="dict-rule" />
-        <p className="dict-muted">Skipped. That wording looks like a slur, and the filter is on.</p>
-      </article>
-    )
-  }
-
   const photo = model.photo
   const body = (
     <div className={photo ? 'dict-entry' : 'dict-entry no-photo'}>
