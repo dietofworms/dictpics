@@ -130,6 +130,15 @@ describe('urban proxy', () => {
     }
   })
 
+  it('answers a health check without calling Urban Dictionary', async () => {
+    const fetchImpl = vi.fn()
+    expect(await handleUrbanRequest('/dictpics/api/urban/health', 'GET', fetchImpl)).toEqual({
+      status: 200,
+      body: { ok: true },
+    })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('ignores every other path', async () => {
     const fetchImpl = vi.fn()
     expect(await handleUrbanRequest('/logo.webp', 'GET', fetchImpl)).toBe('next')

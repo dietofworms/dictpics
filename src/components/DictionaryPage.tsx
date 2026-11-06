@@ -42,7 +42,7 @@ function CreditUrban({ entry }: { entry: UrbanEntry }) {
       {entry.permalink ? (
         <span>
           {' · '}
-          <a href={entry.permalink} target="_blank" rel="noreferrer">
+          <a href={entry.permalink} target="_blank" rel="noopener noreferrer">
             view on Urban Dictionary
           </a>
         </span>

@@ -28,6 +28,19 @@ const low = {
   defid: 1,
 }
 
+function proxyFetch(onTerm: (url: string) => Response | Promise<Response>) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (new URL(url, 'http://dictpics.local').pathname.endsWith('/api/urban/health')) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return onTerm(url)
+  })
+}
+
 describe('dictpics', () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -51,8 +64,7 @@ describe('dictpics', () => {
 
   it('loads a live definition through the local proxy', async () => {
     const user = userEvent.setup()
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input)
+    const fetchMock = proxyFetch((url) => {
       expect(url.startsWith('/api/urban?term=')).toBe(true)
       expect(url).not.toContain('urbandictionary.com')
       return {
@@ -80,16 +92,18 @@ describe('dictpics', () => {
 
   it('does not invent a definition when the static host has no proxy', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response('<html>missing</html>', {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).not.toContain('term=')
+      return new Response('<html>missing</html>', {
         status: 404,
         headers: { 'content-type': 'text/html' },
-      })),
-    )
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
     render(<App />)
     await user.selectOptions(screen.getByLabelText(/^term$/i), 'gremlin')
     expect((await screen.findAllByText(STATIC_HOST_LOOKUP_MESSAGE)).length).toBeGreaterThan(0)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(screen.queryByText(/Definition: Urban Dictionary/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /use my own wording/i })).toBeInTheDocument()
   })
@@ -98,7 +112,7 @@ describe('dictpics', () => {
     const user = userEvent.setup()
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ ok: true, json: async () => ({ list: [] }) }) as Response),
+      proxyFetch(async () => ({ ok: true, json: async () => ({ list: [] }) }) as Response),
     )
     render(<App />)
     await user.selectOptions(screen.getByLabelText(/^term$/i), 'gremlin')
@@ -118,7 +132,7 @@ describe('dictpics', () => {
 
   it('removes likely slurs from the list when the filter is turned on', async () => {
     const user = userEvent.setup()
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = proxyFetch(async () => ({
       ok: true,
       json: async () => ({ list: [high] }),
     } as Response))
@@ -140,8 +154,8 @@ describe('dictpics', () => {
 
   it('draws a random listed term through the proxy', async () => {
     const user = userEvent.setup()
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input).startsWith('/api/urban?term=')).toBe(true)
+    const fetchMock = proxyFetch((url) => {
+      expect(url.startsWith('/api/urban?term=')).toBe(true)
       return {
         ok: true,
         json: async () => ({ list: [high] }),

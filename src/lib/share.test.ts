@@ -9,6 +9,7 @@ describe('export helpers', () => {
   it('names the png from the headword', () => {
     expect(entryFilename('Chaos Gremlin')).toBe('dictpics-chaos-gremlin.png')
     expect(entryFilename('!!!')).toBe('dictpics-entry.png')
+    expect(entryFilename('../../<img onerror=alert(1)>')).toBe('dictpics-img-onerror-alert-1.png')
   })
 
   it('shares a png file when the browser can', async () => {

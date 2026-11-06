@@ -50,12 +50,20 @@ jobs:
           VITE_URBAN_LOOKUP_URL: ${{ vars.VITE_URBAN_LOOKUP_URL }}
 
       - name: Check Pages base
-        run: |
-          base="${DICTPICS_BASE_PATH%/}"
-          grep -q "${base}/assets/" dist/index.html
-          grep -q "${base}/logo.webp" dist/index.html
         env:
           DICTPICS_BASE_PATH: ${{ steps.pages.outputs.base_path || '/dictpics' }}
+        run: |
+          base="${DICTPICS_BASE_PATH%/}"
+          case "$base" in
+            /[A-Za-z0-9._-]*)
+              case "$base" in
+                *[!/A-Za-z0-9._-]*) echo "Refusing unusual Pages base" >&2; exit 1 ;;
+              esac
+              ;;
+            *) echo "Refusing unusual Pages base" >&2; exit 1 ;;
+          esac
+          grep -q "${base}/assets/" dist/index.html
+          grep -q "${base}/logo.webp" dist/index.html
 
       - name: Upload Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'

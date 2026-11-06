@@ -26,6 +26,11 @@ export function isUrbanLookupPath(pathname: string): boolean {
   return normalized === '/api/urban' || /^\/[^/]+\/api\/urban$/.test(normalized)
 }
 
+export function isUrbanHealthPath(pathname: string): boolean {
+  const normalized = pathname.replace(/\/+$/, '') || '/'
+  return normalized === '/api/urban/health' || /^\/[^/]+\/api\/urban\/health$/.test(normalized)
+}
+
 export type UrbanProxyResult = { status: number; body: unknown } | 'next'
 
 type MiniResponse = {
@@ -47,6 +52,10 @@ export async function handleUrbanRequest(
   }
 
   const pathname = parsed.pathname.replace(/\/+$/, '') || '/'
+  if (isUrbanHealthPath(pathname)) {
+    if (method.toUpperCase() !== 'GET') return { status: 405, body: { error: 'GET only' } }
+    return { status: 200, body: { ok: true } }
+  }
   if (!isUrbanLookupPath(pathname)) return 'next'
   if (method.toUpperCase() !== 'GET') {
     return { status: 405, body: { error: 'GET only' } }

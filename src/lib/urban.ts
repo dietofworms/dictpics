@@ -66,7 +66,8 @@ export function sanitizeUrbanPayload(data: unknown): { list: UrbanListItem[] } {
 export function urbanPermalink(value: string): string | null {
   try {
     const url = new URL(value)
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    if (url.protocol !== 'https:') return null
+    if (url.username || url.password) return null
     const host = url.hostname.toLowerCase()
     if (host !== 'urbandictionary.com' && host !== 'www.urbandictionary.com') return null
     return url.toString()
@@ -119,13 +120,30 @@ export function urbanLookupEndpoint(env: { baseUrl: string; configured?: string 
     } catch {
       throw new LookupUnavailableError()
     }
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new LookupUnavailableError()
-    if (url.username || url.password) throw new LookupUnavailableError()
+    const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) throw new LookupUnavailableError()
+    if (url.username || url.password || url.search || url.hash) throw new LookupUnavailableError()
     if (url.hostname.toLowerCase() === 'api.urbandictionary.com') throw new LookupUnavailableError()
     return url.toString()
   }
   const base = env.baseUrl.endsWith('/') ? env.baseUrl : `${env.baseUrl}/`
   return `${base}api/urban`
+}
+
+export function assertPublishableLookupUrl(value: string | undefined): void {
+  const trimmed = value?.trim()
+  if (!trimmed) return
+  const reject = () => {
+    throw new Error(
+      'VITE_URBAN_LOOKUP_URL must be an https URL with no username, password, query, or hash, and must not be the Urban Dictionary API',
+    )
+  }
+  try {
+    urbanLookupEndpoint({ baseUrl: '/', configured: trimmed })
+  } catch {
+    reject()
+  }
+  if (new URL(trimmed).protocol !== 'https:') reject()
 }
 
 export function urbanLookupRequestUrl(term: string, endpoint: string): string {

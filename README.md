@@ -27,9 +27,11 @@ npm run preview
 
 ## GitHub Pages
 
-The site is prepared for https://dietofworms.github.io/dictpics/. Pushing to `master` runs `.github/workflows/pages.yml`, which tests, builds with that base path, and deploys. This repository stays private. Nothing in the workflow turns Pages on or changes who can see the repo.
+The site is prepared for https://dietofworms.github.io/dictpics/. Pushing to `master` runs `.github/workflows/pages.yml`, which tests, builds with that base path, and deploys. Nothing in the workflow turns Pages on or changes who can see the repo.
 
-GitHub Pages serves files only. It cannot host `/api/urban`. A browser on Pages also cannot call `api.urbandictionary.com` directly, because that API does not allow cross-origin calls. The Pages build does not invent a definition when the lookup is missing.
+The files GitHub Pages serves are public on the internet. Keeping this repository private does not keep that site private. There is no custom domain in this repo. Do not add one unless that hostname should serve the same public files.
+
+GitHub Pages serves files only. It cannot host `/api/urban`. A browser on Pages also cannot call `api.urbandictionary.com` directly, because that API does not allow cross-origin calls. Without `VITE_URBAN_LOOKUP_URL`, the published site does not send the chosen headword anywhere. It does not invent a definition.
 
 ### Turn on Pages
 
@@ -38,9 +40,7 @@ You do this in the repository settings. The workflow does not do it for you.
 1. Open **Settings → Pages**.
 2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
 
-Private Pages follows GitHub's plan rules. Do not make the repository public just to publish the site.
-
-Until Pages is enabled, the workflow can still run after it is on `master`, but GitHub will not serve the site.
+Until Pages is enabled, a push to `master` can still run the workflow, but GitHub will not serve the site. Enabling Pages publishes the built files publicly.
 
 ### Live definitions on Pages
 
@@ -56,6 +56,6 @@ PORT=8787 ALLOWED_ORIGINS=https://dietofworms.github.io npm run proxy
 
 `VITE_URBAN_LOOKUP_URL` = `https://<your-proxy-host>/api/urban`
 
-The next push to `master` copies that public URL into the static build. Do not put a password or token in it. The client refuses a lookup URL that embeds credentials or that points straight at `api.urbandictionary.com`.
+The next push to `master` copies that URL into the public JavaScript. Use https, with no username, password, query string, or token. The build refuses anything else, including a direct Urban Dictionary URL. The proxy and Urban Dictionary then see the headword and the proxy's network address. They do not receive the photograph. A cropped photo is re-encoded in the browser as a JPEG, which drops the original file's EXIF and location metadata, and it stays in the browser unless you download or share the PNG.
 
 With no variable set, Pages can still crop a photo, pick a headword, use your own wording, and download a PNG. A live lookup shows that the static host cannot reach the dictionary.

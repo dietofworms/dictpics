@@ -39,8 +39,13 @@ export function PhotoField({
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setError('Choose an image file.')
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+    if (!allowed.has(file.type)) {
+      setError('Choose a JPEG, PNG, WebP, or GIF.')
+      return
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setError('Choose an image under 12 MB.')
       return
     }
     setError(null)
@@ -60,8 +65,9 @@ export function PhotoField({
       onPhoto(dataUrl)
       replaceSource(null)
       setError(null)
-    } catch {
-      setError("That image couldn't be cropped. Try another one.")
+    } catch (error) {
+      replaceSource(null)
+      setError(error instanceof Error ? error.message : "That image couldn't be cropped. Try another one.")
     } finally {
       setBusy(false)
     }

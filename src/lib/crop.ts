@@ -9,8 +9,13 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
+const MAX_PHOTO_SIDE = 8000
+
 export async function cropToDataUrl(src: string, pixels: Area): Promise<string> {
   const image = await loadImage(src)
+  if (image.naturalWidth > MAX_PHOTO_SIDE || image.naturalHeight > MAX_PHOTO_SIDE) {
+    throw new Error('That image is too large.')
+  }
   const longest = Math.max(pixels.width, pixels.height)
   const scale = longest > 1200 ? 1200 / longest : 1
   const width = Math.max(1, Math.round(pixels.width * scale))
@@ -21,5 +26,8 @@ export async function cropToDataUrl(src: string, pixels: Area): Promise<string> 
   const context = canvas.getContext('2d')
   if (!context) throw new Error('Could not crop that image')
   context.drawImage(image, pixels.x, pixels.y, pixels.width, pixels.height, 0, 0, width, height)
-  return canvas.toDataURL('image/jpeg', 0.92)
+  // A new JPEG from the canvas does not carry the file's EXIF or GPS block.
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
+  if (!dataUrl.startsWith('data:image/jpeg')) throw new Error('Could not crop that image')
+  return dataUrl
 }
