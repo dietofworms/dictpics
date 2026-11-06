@@ -1,16 +1,5 @@
 export const URBAN_API = 'https://api.urbandictionary.com/v0/define'
 
-/** Shown when a static host cannot reach Urban Dictionary. Never a stand-in definition. */
-export const STATIC_HOST_LOOKUP_MESSAGE =
-  'Live lookup is not available on this static host. GitHub Pages cannot run the proxy, and Urban Dictionary does not allow browser calls. No definition was invented.'
-
-export class LookupUnavailableError extends Error {
-  constructor() {
-    super('lookup unavailable')
-    this.name = 'LookupUnavailableError'
-  }
-}
-
 export type UrbanListItem = {
   word: string
   definition: string
@@ -111,46 +100,8 @@ export function definitionParts(text: string): TextPart[] {
   return parts
 }
 
-export function urbanLookupEndpoint(env: { baseUrl: string; configured?: string }): string {
-  const configured = env.configured?.trim()
-  if (configured) {
-    let url: URL
-    try {
-      url = new URL(configured)
-    } catch {
-      throw new LookupUnavailableError()
-    }
-    const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) throw new LookupUnavailableError()
-    if (url.username || url.password || url.search || url.hash) throw new LookupUnavailableError()
-    if (url.hostname.toLowerCase() === 'api.urbandictionary.com') throw new LookupUnavailableError()
-    return url.toString()
-  }
-  const base = env.baseUrl.endsWith('/') ? env.baseUrl : `${env.baseUrl}/`
-  return `${base}api/urban`
-}
-
-export function assertPublishableLookupUrl(value: string | undefined): void {
-  const trimmed = value?.trim()
-  if (!trimmed) return
-  const reject = () => {
-    throw new Error(
-      'VITE_URBAN_LOOKUP_URL must be an https URL with no username, password, query, or hash, and must not be the Urban Dictionary API',
-    )
-  }
-  try {
-    urbanLookupEndpoint({ baseUrl: '/', configured: trimmed })
-  } catch {
-    reject()
-  }
-  if (new URL(trimmed).protocol !== 'https:') reject()
-}
-
-export function urbanLookupRequestUrl(term: string, endpoint: string): string {
-  const absolute = /^https?:\/\//i.test(endpoint)
-  const url = absolute ? new URL(endpoint) : new URL(endpoint, 'http://dictpics.local')
+export function urbanLookupUrl(term: string): string {
+  const url = new URL(URBAN_API)
   url.searchParams.set('term', term)
-  if (!absolute) return `${url.pathname}${url.search}`
   return url.toString()
 }
-

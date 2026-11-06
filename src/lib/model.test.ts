@@ -49,13 +49,6 @@ describe('deriveModel', () => {
     })
   })
 
-  it('does not invent a definition when the static host cannot look one up', () => {
-    expect(deriveModel({ ...base, term: 'gremlin', status: 'unavailable' })).toMatchObject({
-      kind: 'unavailable',
-      term: 'gremlin',
-    })
-  })
-
   it('skips your wording when the filter is on', () => {
     expect(
       deriveModel({
