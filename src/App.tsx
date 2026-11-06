@@ -1,6 +1,7 @@
 import { Dices, Download, Share2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DictionaryPage } from '@/components/DictionaryPage.tsx'
+import { FitToWidth } from '@/components/FitToWidth.tsx'
 import { PhotoField } from '@/components/PhotoField.tsx'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
@@ -164,7 +165,7 @@ export default function App() {
           <p className="mt-1 text-sm text-[#5c5146]">A photograph beside a real Urban Dictionary entry.</p>
         </div>
       </header>
-      <main className="mx-auto grid max-w-6xl items-start gap-6 px-4 pb-16 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <main className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] items-start gap-6 px-4 pb-16 lg:grid-cols-[340px_minmax(0,1fr)]">
         <section className="grid gap-4 rounded-lg border border-[#d7c7ae] bg-[#f7f1e6] p-4 shadow-sm" aria-label="Entry controls">
           <PhotoField photo={photo} onPhoto={setPhoto} />
           <div className="grid gap-2">
@@ -263,9 +264,11 @@ export default function App() {
             </div>
           ) : null}
         </section>
-        <section className="grid min-w-0 gap-3" aria-label="Preview">
-          <div className="overflow-x-auto pb-2">
-            <DictionaryPage model={model} pageRef={pageRef} />
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3" aria-label="Preview">
+          <div className="pb-2">
+            <FitToWidth>
+              <DictionaryPage model={model} pageRef={pageRef} />
+            </FitToWidth>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => void onDownload()} disabled={!canExport || exporting}>
