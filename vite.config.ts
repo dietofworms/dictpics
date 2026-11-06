@@ -2,10 +2,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { loadEnv, type Plugin } from 'vite'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
-import { createUrbanMiddleware } from './server/urbanProxy.ts'
-import { assertPublishableLookupUrl } from './src/lib/urban.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 
@@ -18,15 +16,7 @@ function productionBase(): string {
   return value.endsWith('/') ? value : `${value}/`
 }
 
-/** Origins the page may fetch from: itself, plus the configured lookup proxy. */
-export function connectSources(lookupUrl: string | undefined): string {
-  const sources = ["'self'"]
-  const trimmed = lookupUrl?.trim()
-  if (trimmed) sources.push(new URL(trimmed).origin)
-  return sources.join(' ')
-}
-
-function productionDocumentPolicy(lookupUrl: string | undefined): Plugin {
+function productionDocumentPolicy(): Plugin {
   const policy = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -36,7 +26,7 @@ function productionDocumentPolicy(lookupUrl: string | undefined): Plugin {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    `connect-src ${connectSources(lookupUrl)}`,
+    "connect-src 'self' https://api.urbandictionary.com",
     "worker-src 'self' blob:",
   ].join('; ')
   return {
@@ -57,23 +47,12 @@ function productionDocumentPolicy(lookupUrl: string | undefined): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  const lookupUrl = loadEnv(mode, root, 'VITE_').VITE_URBAN_LOOKUP_URL
-  if (mode === 'production') assertPublishableLookupUrl(lookupUrl)
   return {
   base: mode === 'production' ? productionBase() : '/',
   plugins: [
     react(),
     tailwindcss(),
-    productionDocumentPolicy(lookupUrl),
-    {
-      name: 'dictpics-urban-proxy',
-      configureServer(server) {
-        server.middlewares.use(createUrbanMiddleware())
-      },
-      configurePreviewServer(server) {
-        server.middlewares.use(createUrbanMiddleware())
-      },
-    },
+    productionDocumentPolicy(),
   ],
   resolve: {
     alias: {

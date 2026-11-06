@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.tsx'
 import { pageNumberFor } from './lib/dictionary.ts'
 import { OWN_WORDING, SLANG_TERMS } from './lib/terms.ts'
-import { STATIC_HOST_LOOKUP_MESSAGE } from './lib/urban.ts'
 
 const high = {
   word: 'gremlin',
@@ -28,15 +27,12 @@ const low = {
   defid: 1,
 }
 
-function proxyFetch(onTerm: (url: string) => Response | Promise<Response>) {
+const URBAN = 'https://api.urbandictionary.com/v0/define?term='
+
+function urbanFetch(onTerm: (url: string) => Response | Promise<Response>) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    if (new URL(url, 'http://dictpics.local').pathname.endsWith('/api/urban/health')) {
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
+    expect(url.startsWith(URBAN)).toBe(true)
     return onTerm(url)
   })
 }
@@ -62,11 +58,10 @@ describe('dictpics', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('loads a live definition through the local proxy', async () => {
+  it('loads a live definition from Urban Dictionary', async () => {
     const user = userEvent.setup()
-    const fetchMock = proxyFetch((url) => {
-      expect(url.startsWith('/api/urban?term=')).toBe(true)
-      expect(url).not.toContain('urbandictionary.com')
+    const fetchMock = urbanFetch((url) => {
+      expect(url).toBe(`${URBAN}gremlin`)
       return {
         ok: true,
         json: async () => ({ list: [low, high] }),
@@ -90,29 +85,28 @@ describe('dictpics', () => {
     expect(screen.getByRole('button', { name: /web share/i })).toBeEnabled()
   })
 
-  it('does not invent a definition when the static host has no proxy', async () => {
+  it('offers a retry and does not invent a definition when the lookup fails', async () => {
     const user = userEvent.setup()
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input)).not.toContain('term=')
-      return new Response('<html>missing</html>', {
-        status: 404,
-        headers: { 'content-type': 'text/html' },
-      })
+    let fail = true
+    const fetchMock = urbanFetch(async () => {
+      if (fail) throw new TypeError('Failed to fetch')
+      return { ok: true, json: async () => ({ list: [high] }) } as Response
     })
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
     await user.selectOptions(screen.getByLabelText(/^term$/i), 'gremlin')
-    expect((await screen.findAllByText(STATIC_HOST_LOOKUP_MESSAGE)).length).toBeGreaterThan(0)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect((await screen.findAllByText(/lookup didn't go through/i)).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Definition: Urban Dictionary/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /use my own wording/i })).toBeInTheDocument()
+    fail = false
+    await user.click(screen.getByRole('button', { name: /try again/i }))
+    expect(await screen.findByText(/FIXTURE_HIGH/)).toBeInTheDocument()
   })
 
   it('offers your own wording when Urban Dictionary has no entry', async () => {
     const user = userEvent.setup()
     vi.stubGlobal(
       'fetch',
-      proxyFetch(async () => ({ ok: true, json: async () => ({ list: [] }) }) as Response),
+      urbanFetch(async () => ({ ok: true, json: async () => ({ list: [] }) }) as Response),
     )
     render(<App />)
     await user.selectOptions(screen.getByLabelText(/^term$/i), 'gremlin')
@@ -132,7 +126,7 @@ describe('dictpics', () => {
 
   it('removes likely slurs from the list when the filter is turned on', async () => {
     const user = userEvent.setup()
-    const fetchMock = proxyFetch(async () => ({
+    const fetchMock = urbanFetch(async () => ({
       ok: true,
       json: async () => ({ list: [high] }),
     } as Response))
@@ -152,10 +146,9 @@ describe('dictpics', () => {
     expect(screen.queryByRole('heading', { level: 1, name: 'retard' })).not.toBeInTheDocument()
   })
 
-  it('draws a random listed term through the proxy', async () => {
+  it('draws a random listed term and looks it up', async () => {
     const user = userEvent.setup()
-    const fetchMock = proxyFetch((url) => {
-      expect(url.startsWith('/api/urban?term=')).toBe(true)
+    const fetchMock = urbanFetch(() => {
       return {
         ok: true,
         json: async () => ({ list: [high] }),

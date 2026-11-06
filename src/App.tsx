@@ -14,7 +14,7 @@ import { entryFilename, shareBlob, triggerDownload } from '@/lib/share.ts'
 import { isLikelySlur } from '@/lib/slurs.ts'
 import { OWN_WORDING, pickRandomTerm, SKIP_SLURS_DEFAULT, termsForPicker } from '@/lib/terms.ts'
 import { lookupTerm } from '@/lib/lookup.ts'
-import { LookupUnavailableError, STATIC_HOST_LOOKUP_MESSAGE, type UrbanEntry } from '@/lib/urban.ts'
+import type { UrbanEntry } from '@/lib/urban.ts'
 
 const fieldClass =
   'flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -64,10 +64,6 @@ export default function App() {
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
         if (error instanceof DOMException && error.name === 'AbortError') return
-        if (error instanceof LookupUnavailableError) {
-          setStatus('unavailable')
-          return
-        }
         setStatus('error')
       })
 
@@ -247,14 +243,12 @@ export default function App() {
               Looking up “{term}”…
             </p>
           ) : null}
-          {model.kind === 'missing' || model.kind === 'error' || model.kind === 'unavailable' ? (
+          {model.kind === 'missing' || model.kind === 'error' ? (
             <div className="grid gap-2">
               <p className="text-sm">
                 {model.kind === 'missing'
                   ? 'Urban Dictionary has no entry for this word.'
-                  : model.kind === 'unavailable'
-                    ? STATIC_HOST_LOOKUP_MESSAGE
-                    : "The lookup didn't go through."}
+                  : "The lookup didn't go through."}
               </p>
               <div className="flex flex-wrap gap-2">
                 {model.kind === 'error' ? (

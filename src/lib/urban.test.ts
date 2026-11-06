@@ -1,13 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { publicAsset } from './assets.ts'
-import {
-  definitionParts,
-  LookupUnavailableError,
-  pickBestEntry,
-  urbanLookupEndpoint,
-  urbanLookupRequestUrl,
-  urbanPermalink,
-} from './urban.ts'
+import { definitionParts, pickBestEntry, urbanLookupUrl, urbanPermalink } from './urban.ts'
 import { lookupTerm } from './lookup.ts'
 
 const permalink = 'https://www.urbandictionary.com/define.php?term=gremlin&defid=2'
@@ -92,91 +85,37 @@ describe('urban payloads', () => {
     expect(urbanPermalink('not a url')).toBeNull()
   })
 
-  it('keeps Pages lookups on your proxy instead of calling Urban Dictionary from the browser', () => {
-    expect(urbanLookupEndpoint({ baseUrl: '/' })).toBe('/api/urban')
-    expect(urbanLookupEndpoint({ baseUrl: '/dictpics/' })).toBe('/dictpics/api/urban')
-    expect(urbanLookupRequestUrl('chaos gremlin', '/dictpics/api/urban')).toBe(
-      '/dictpics/api/urban?term=chaos+gremlin',
-    )
-    expect(
-      urbanLookupRequestUrl('gremlin', urbanLookupEndpoint({
-        baseUrl: '/dictpics/',
-        configured: 'https://proxy.example/api/urban',
-      })),
-    ).toBe('https://proxy.example/api/urban?term=gremlin')
+  it('builds the Urban Dictionary lookup URL with the term encoded', () => {
+    expect(urbanLookupUrl('chaos gremlin')).toBe('https://api.urbandictionary.com/v0/define?term=chaos+gremlin')
+    expect(urbanLookupUrl('a&b=c#d')).toBe('https://api.urbandictionary.com/v0/define?term=a%26b%3Dc%23d')
     expect(publicAsset('logo.webp', '/dictpics/')).toBe('/dictpics/logo.webp')
-    expect(() =>
-      urbanLookupEndpoint({ baseUrl: '/', configured: 'https://api.urbandictionary.com/v0/define' }),
-    ).toThrow(LookupUnavailableError)
-    expect(() => urbanLookupEndpoint({ baseUrl: '/', configured: 'javascript:alert(1)' })).toThrow(
-      LookupUnavailableError,
-    )
-    expect(() =>
-      urbanLookupEndpoint({ baseUrl: '/', configured: 'https://user:secret@proxy.example/api/urban' }),
-    ).toThrow(LookupUnavailableError)
-    expect(() =>
-      urbanLookupEndpoint({ baseUrl: '/', configured: 'https://proxy.example/api/urban?token=secret' }),
-    ).toThrow(LookupUnavailableError)
-    expect(() => urbanLookupEndpoint({ baseUrl: '/', configured: 'http://proxy.example/api/urban' })).toThrow(
-      LookupUnavailableError,
-    )
-    expect(urbanLookupEndpoint({ baseUrl: '/', configured: 'http://127.0.0.1:8787/api/urban' })).toBe(
-      'http://127.0.0.1:8787/api/urban',
-    )
   })
 
-  it('does not send the headword when no local proxy answers', async () => {
-    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0]) => new Response('<html>missing</html>', {
-      status: 404,
-      headers: { 'content-type': 'text/html' },
-    }))
-    await expect(lookupTerm('gremlin', undefined, fetchImpl as typeof fetch, { baseUrl: '/dictpics/' })).rejects.toBeInstanceOf(
-      LookupUnavailableError,
-    )
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('/dictpics/api/urban/health')
-    expect(String(fetchImpl.mock.calls[0]?.[0])).not.toContain('term=')
-  })
-
-  it('sends the headword only after the local proxy identifies itself', async () => {
-    const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
-      const url = String(input)
-      if (url.endsWith('/api/urban/health')) {
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        })
-      }
-      expect(url).not.toContain('urbandictionary.com')
-      return Response.json({
+  it('asks Urban Dictionary directly, without cookies or a referrer', async () => {
+    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+      Response.json({
         list: [{
           word: 'gremlin',
-          definition: 'FIXTURE_FROM_PROXY',
+          definition: 'FIXTURE_FROM_UPSTREAM',
           example: '',
           author: 'fixture',
-          permalink: 'https://www.urbandictionary.com/define.php?term=gremlin&defid=1',
+          permalink,
           thumbs_up: 1,
           thumbs_down: 0,
           defid: 1,
         }],
-      })
-    })
-    const entry = await lookupTerm('gremlin', undefined, fetchImpl as typeof fetch, { baseUrl: '/' })
-    expect(entry?.definition).toBe('FIXTURE_FROM_PROXY')
-    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
-      '/api/urban/health',
-      '/api/urban?term=gremlin',
-    ])
+      }),
+    )
+    const entry = await lookupTerm('gremlin', undefined, fetchImpl as typeof fetch)
+    expect(entry?.definition).toBe('FIXTURE_FROM_UPSTREAM')
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('https://api.urbandictionary.com/v0/define?term=gremlin')
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ credentials: 'omit', referrerPolicy: 'no-referrer' })
   })
 
-  it('uses a configured https proxy without probing', async () => {
-    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0]) => Response.json({ list: [] }))
-    await lookupTerm('gremlin', undefined, fetchImpl as typeof fetch, {
-      baseUrl: '/dictpics/',
-      configured: 'https://proxy.example/api/urban',
-    })
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('https://proxy.example/api/urban?term=gremlin')
+  it('reports a failed lookup instead of inventing a definition', async () => {
+    const fetchImpl = vi.fn(async () => new Response('nope', { status: 503 }))
+    await expect(lookupTerm('gremlin', undefined, fetchImpl as typeof fetch)).rejects.toThrow('lookup failed')
   })
 
   it('turns bracketed words into linked text without dropping them', () => {
