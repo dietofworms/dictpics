@@ -1,6 +1,29 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
-import { createCorsProxyServer, createUrbanMiddleware, handleUrbanRequest } from './urbanProxy.ts'
+import {
+  createCorsProxyServer,
+  createRateLimiter,
+  createResponseCache,
+  createUrbanMiddleware,
+  handleUrbanRequest,
+  MAX_UPSTREAM_BYTES,
+} from './urbanProxy.ts'
+import type { Server } from 'node:http'
+
+async function listen(server: Server): Promise<string> {
+  await new Promise<void>((resolve) => {
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('no port')
+  return `http://127.0.0.1:${address.port}`
+}
+
+async function close(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()))
+  })
+}
 
 const upstreamList = {
   list: [
@@ -108,7 +131,14 @@ describe('urban proxy', () => {
       const blocked = await fetch(`${base}/api/urban?term=gremlin`, {
         headers: { Origin: 'https://evil.example' },
       })
+      expect(blocked.status).toBe(403)
       expect(blocked.headers.get('access-control-allow-origin')).toBeNull()
+      expect(blocked.headers.get('x-content-type-options')).toBe('nosniff')
+
+      const noOrigin = await fetch(`${base}/api/urban?term=other`)
+      expect(noOrigin.status).toBe(403)
+      // Only the allowed request reached Urban Dictionary.
+      expect(fetchImpl).toHaveBeenCalledOnce()
 
       const preflight = await fetch(`${base}/api/urban?term=gremlin`, {
         method: 'OPTIONS',
@@ -170,5 +200,63 @@ describe('urban proxy', () => {
     expect(headers['cache-control']).toBe('no-store')
     expect(headers['content-type']).toContain('application/json')
     expect(JSON.parse(res.body).list[0].definition).toBe('FIXTURE_FROM_UPSTREAM')
+  })
+
+  it('rate limits lookups per client and serves repeats from cache', async () => {
+    const fetchImpl = vi.fn(async () => Response.json(upstreamList)) as typeof fetch
+    const server = createCorsProxyServer({
+      allowedOrigins: ['https://dietofworms.github.io'],
+      fetchImpl,
+      ratePerMinute: 3,
+    })
+    const base = await listen(server)
+    const headers = { Origin: 'https://dietofworms.github.io' }
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        expect((await fetch(`${base}/api/urban?term=Gremlin`, { headers })).status).toBe(200)
+      }
+      expect(fetchImpl).toHaveBeenCalledOnce()
+      const limited = await fetch(`${base}/api/urban?term=gremlin`, { headers })
+      expect(limited.status).toBe(429)
+      expect(limited.headers.get('retry-after')).toBe('60')
+      expect((await fetch(`${base}/api/urban/health`, { headers })).status).toBe(200)
+    } finally {
+      await close(server)
+    }
+  })
+
+  it('refuses an oversized upstream body', async () => {
+    const huge = 'x'.repeat(MAX_UPSTREAM_BYTES + 1)
+    const fetchImpl = vi.fn(async () => new Response(huge)) as typeof fetch
+    expect(await handleUrbanRequest('/api/urban?term=gremlin', 'GET', fetchImpl)).toEqual({
+      status: 502,
+      body: { error: 'upstream failed' },
+    })
+    const declared = vi.fn(
+      async () => new Response('{}', { headers: { 'content-length': String(MAX_UPSTREAM_BYTES + 1) } }),
+    ) as typeof fetch
+    expect(await handleUrbanRequest('/api/urban?term=gremlin', 'GET', declared)).toEqual({
+      status: 502,
+      body: { error: 'upstream failed' },
+    })
+  })
+
+  it('resets the rate window and expires cache entries', () => {
+    let time = 0
+    const allow = createRateLimiter(1, 1000, () => time)
+    expect(allow('a')).toBe(true)
+    expect(allow('a')).toBe(false)
+    expect(allow('b')).toBe(true)
+    time = 1000
+    expect(allow('a')).toBe(true)
+
+    const cache = createResponseCache(2, 500, () => time)
+    cache.set('x', 1)
+    cache.set('y', 2)
+    cache.set('z', 3)
+    expect(cache.get('x')).toBeUndefined()
+    expect(cache.get('z')).toBe(3)
+    time += 500
+    expect(cache.get('z')).toBeUndefined()
   })
 })

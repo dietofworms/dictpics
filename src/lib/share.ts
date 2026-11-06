@@ -15,7 +15,8 @@ export function triggerDownload(blob: Blob, filename: string): void {
   document.body.append(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Revoking in the same tick can cancel the download in Safari and Firefox.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
 export async function shareBlob(

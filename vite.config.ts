@@ -2,7 +2,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vitest/config'
+import { loadEnv, type Plugin } from 'vite'
+import { defineConfig } from 'vitest/config'
 import { createUrbanMiddleware } from './server/urbanProxy.ts'
 import { assertPublishableLookupUrl } from './src/lib/urban.ts'
 
@@ -17,7 +18,15 @@ function productionBase(): string {
   return value.endsWith('/') ? value : `${value}/`
 }
 
-function productionDocumentPolicy(): Plugin {
+/** Origins the page may fetch from: itself, plus the configured lookup proxy. */
+export function connectSources(lookupUrl: string | undefined): string {
+  const sources = ["'self'"]
+  const trimmed = lookupUrl?.trim()
+  if (trimmed) sources.push(new URL(trimmed).origin)
+  return sources.join(' ')
+}
+
+function productionDocumentPolicy(lookupUrl: string | undefined): Plugin {
   const policy = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -27,7 +36,7 @@ function productionDocumentPolicy(): Plugin {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    "connect-src 'self' https:",
+    `connect-src ${connectSources(lookupUrl)}`,
     "worker-src 'self' blob:",
   ].join('; ')
   return {
@@ -48,13 +57,14 @@ function productionDocumentPolicy(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  if (mode === 'production') assertPublishableLookupUrl(process.env.VITE_URBAN_LOOKUP_URL)
+  const lookupUrl = loadEnv(mode, root, 'VITE_').VITE_URBAN_LOOKUP_URL
+  if (mode === 'production') assertPublishableLookupUrl(lookupUrl)
   return {
   base: mode === 'production' ? productionBase() : '/',
   plugins: [
     react(),
     tailwindcss(),
-    productionDocumentPolicy(),
+    productionDocumentPolicy(lookupUrl),
     {
       name: 'dictpics-urban-proxy',
       configureServer(server) {

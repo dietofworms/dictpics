@@ -32,12 +32,20 @@ describe('export helpers', () => {
     await expect(shareBlob(new Blob(['png']), 'a.png', 'a', {} as Navigator)).resolves.toBe('unavailable')
   })
 
-  it('clicks a download link', () => {
-    const click = vi.fn()
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:dictpics')
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(click)
-    triggerDownload(new Blob(['png']), 'dictpics-gremlin.png')
-    expect(click).toHaveBeenCalledOnce()
+  it('clicks a download link and revokes the URL later', () => {
+    vi.useFakeTimers()
+    try {
+      const click = vi.fn()
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:dictpics')
+      const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(click)
+      triggerDownload(new Blob(['png']), 'dictpics-gremlin.png')
+      expect(click).toHaveBeenCalledOnce()
+      expect(revoke).not.toHaveBeenCalled()
+      vi.runAllTimers()
+      expect(revoke).toHaveBeenCalledWith('blob:dictpics')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
