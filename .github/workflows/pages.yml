@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # configure-pages reads the Pages site config; without this it gets 403.
+      pages: read
     outputs:
       pages_enabled: ${{ steps.pages.outcome == 'success' }}
     steps:
@@ -45,7 +47,7 @@ jobs:
       - name: Setup Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: pages
-        # Fails until Pages is enabled (Settings > Pages > Source: GitHub Actions).
+        # Fails while Pages is not enabled (Settings > Pages > Source: GitHub Actions).
         # The build and tests still gate master; only the deploy is skipped.
         continue-on-error: true
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
